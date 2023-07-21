@@ -1,4 +1,4 @@
-class AcGame{
+export class AcGame{
     constructor(id) {
         this.id = id;
         this.$ac_game = $('#' + id);
@@ -9,6 +9,5 @@ class AcGame{
     }
 
     start() {
-
     }
 }
