@@ -508,7 +508,7 @@ class Settings {
         </div>
         <br>
         <div class="ac-game-settings-acwing">
-            <img width="30" src="https://app165.acapp.acwing.com.cn/static/image/settings/acwing_logo.png">
+            <img width="30" src="https://app5745.acapp.acwing.com.cn/static/image/settings/AcWing_logo64x64.png">
             <br>
             <div>
                 AcWing一键登录
@@ -546,7 +546,7 @@ class Settings {
         </div>
         <br>
         <div class="ac-game-settings-acwing">
-            <img width="30" src="https://app165.acapp.acwing.com.cn/static/image/settings/acwing_logo.png">
+            <img width="30" src="https://app5745.acapp.acwing.com.cn/static/image/settings/AcWing_logo64x64.png">
             <br>
             <div>
                 AcWing一键登录
@@ -574,6 +574,8 @@ class Settings {
         this.$register_login = this.$register.find(".ac-game-settings-option");
         this.$register.hide();
 
+        this.$acwing_login = this.$settings.find(".ac-game-settings-acwing img");
+
         this.root.$ac_game.append(this.$settings);
 
         this.start();
@@ -585,8 +587,26 @@ class Settings {
     }
 
     add_listening_events() {
+        let outer = this;
         this.add_listening_events_login();
         this.add_listening_events_register();
+
+        this.$acwing_login.click(function() {
+            outer.acwing_login();
+        });
+    }
+
+    acwing_login() {
+        $.ajax({
+            url: "https://app5745.acapp.acwing.com.cn/settings/acwing/web/apply_code/",
+            type: "GET",
+            success: function(resp) {
+                console.log(resp);
+                if (resp.result === "success") {
+                    window.location.replace(resp.apply_code_url);
+                }
+            }
+        });
     }
 
     add_listening_events_login() {
