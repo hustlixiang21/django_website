@@ -199,6 +199,8 @@ class GameMap extends AcGameObject {
         this.spent_time = 0;
         this.cur_skill = null;
 
+        this.flag = false; // 用于判断是否已死亡
+
         if (this.is_me) {
             this.img = new Image();
             this.img.src = this.playground.root.settings.photo;
@@ -241,12 +243,13 @@ class GameMap extends AcGameObject {
     }
 
     shoot_fireball(tx, ty) {
+        if (this.flag) return false;
         let x = this.x, y = this.y;
         let radius = this.playground.height * 0.01 / this.playground.scale;
         let angle = Math.atan2(ty - this.y, tx - this.x);
         let vx = Math.cos(angle), vy = Math.sin(angle);
         let color = "orange";
-        let speed = this.playground.height * 0.7 / this.playground.scale;
+        let speed = this.playground.height * 0.6 / this.playground.scale;
         let move_length = this.playground.width * 1.3 / this.playground.scale;
         new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
     }
@@ -277,14 +280,15 @@ class GameMap extends AcGameObject {
         }
 
         this.radius -= damage;
-        if (this.radius < this.eps) {
+        if (this.radius < this.eps * 3) {
+            this.flag = true;
             this.destroy();
             return false;
         }
         this.damage_x = Math.cos(angle);
         this.damage_y = Math.sin(angle);
         this.damage_speed = damage * 100;
-        this.speed *= 1.20; // 每次被击中之后变小速度加快
+        this.speed *= 1.15; // 每次被击中之后变小速度加快
     }
 
     update() {
