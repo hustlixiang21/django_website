@@ -121,6 +121,13 @@ class GameMap extends AcGameObject {
     start() {
     }
 
+    resize() {
+        this.ctx.canvas.width = this.playground.width;
+        this.ctx.canvas.height = this.playground.height;
+        this.ctx.fillStyle = "rgba(0, 0, 0, 1)";
+        this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    }
+
     update() {
         this.render();
     }
@@ -143,7 +150,7 @@ class GameMap extends AcGameObject {
         this.speed = speed;
         this.move_length = move_length;
         this.friction = 0.8;
-        this.eps = 1;
+        this.eps = 0.01;
     }
     start() {
     }
@@ -163,8 +170,10 @@ class GameMap extends AcGameObject {
     }
 
     render() {
+        let scale = this.playground.scale;
+
         this.ctx.beginPath();
-        this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+        this.ctx.arc(this.x * scale, this.y * scale, this.radius * scale, 0, Math.PI * 2, false);
         this.ctx.fillStyle = this.color;
         this.ctx.fill();
     }
@@ -200,8 +209,8 @@ class GameMap extends AcGameObject {
         if (this.is_me) {
             this.add_listening_events();
         } else {
-            let tx = Math.random() * this.playground.width;
-            let ty = Math.random() * this.playground.height;
+            let tx = Math.random() * this.playground.width / this.playground.scale;
+            let ty = Math.random() * this.playground.height / this.playground.scale;
             this.move_to(tx, ty);
         }
     }
@@ -213,17 +222,17 @@ class GameMap extends AcGameObject {
         this.playground.game_map.$canvas.mousedown(function (e) {
             const rect = outer.ctx.canvas.getBoundingClientRect();
             if (e.which === 3) {
-                outer.move_to(e.clientX - rect.left, e.clientY - rect.top);
+                outer.move_to((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
             } else if (e.which === 1) {
                 if (outer.cur_skill === "fireball") {
-                    outer.shoot_fireball(e.clientX - rect.left, e.clientY - rect.top);
+                    outer.shoot_fireball((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
                 }
                 outer.cur_skill = null;
             }
         });
 
         $(window).keydown(function (e) {
-            if (outer.radius < 10) return false;
+            if (outer.radius < this.eps) return false;
             if (e.which === 81) {
                 outer.cur_skill = "fireball";
                 return false;
@@ -233,13 +242,13 @@ class GameMap extends AcGameObject {
 
     shoot_fireball(tx, ty) {
         let x = this.x, y = this.y;
-        let radius = this.playground.height * 0.01;
+        let radius = this.playground.height * 0.01 / this.playground.scale;
         let angle = Math.atan2(ty - this.y, tx - this.x);
         let vx = Math.cos(angle), vy = Math.sin(angle);
         let color = "orange";
-        let speed = this.playground.height * 0.7;
-        let move_length = this.playground.width * 1.3;
-        new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01);
+        let speed = this.playground.height * 0.7 / this.playground.scale;
+        let move_length = this.playground.width * 1.3 / this.playground.scale;
+        new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
     }
 
     get_dist(x1, y1, x2, y2) {
@@ -268,7 +277,7 @@ class GameMap extends AcGameObject {
         }
 
         this.radius -= damage;
-        if (this.radius < 10) {
+        if (this.radius < this.eps) {
             this.destroy();
             return false;
         }
@@ -279,6 +288,12 @@ class GameMap extends AcGameObject {
     }
 
     update() {
+        this.update_move();
+        this.render();
+    }
+
+    update_move() 
+    {
         this.spent_time += this.timedelta / 1000;
         if (!this.is_me && this.spent_time > 4 && Math.random() < 1 / 300.0) {
             let player = this.playground.players[Math.floor(Math.random() * this.playground.players.length)];
@@ -291,7 +306,7 @@ class GameMap extends AcGameObject {
             this.shoot_fireball(tx, ty);
         }
 
-        if (this.damage_speed > 10) {
+        if (this.damage_speed > this.eps) {
             this.vx = this.vy = 0;
             this.move_length = 0;
             this.x += this.damage_x * this.damage_speed * this.timedelta / 1000;
@@ -303,8 +318,8 @@ class GameMap extends AcGameObject {
                 this.move_length = 0;
                 this.vx = this.vy = 0;
                 if (!this.is_me) {
-                    let tx = Math.random() * this.playground.width;
-                    let ty = Math.random() * this.playground.height;
+                    let tx = Math.random() * this.playground.width / this.playground.scale;
+                    let ty = Math.random() * this.playground.height / this.playground.scale;
                     this.move_to(tx, ty);
                 }
             } else {
@@ -314,21 +329,21 @@ class GameMap extends AcGameObject {
                 this.move_length -= moved;
             }
         }
-        this.render();
     }
 
     render() {
+        let scale = this.playground.scale;
         if (this.is_me) {
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+            this.ctx.arc(this.x * scale, this.y * scale, this.radius * scale, 0, Math.PI * 2, false);
             this.ctx.stroke();
             this.ctx.clip();
-            this.ctx.drawImage(this.img, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+            this.ctx.drawImage(this.img, (this.x - this.radius) * scale, (this.y - this.radius) * scale, this.radius * 2 * scale, this.radius * 2 * scale);
             this.ctx.restore();
         } else {
             this.ctx.beginPath();
-            this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+            this.ctx.arc(this.x * scale, this.y * scale, this.radius * scale, 0, Math.PI * 2, false);
             this.ctx.fillStyle = this.color;
             this.ctx.fill();
         }
@@ -417,8 +432,9 @@ class FireBall extends AcGameObject {
     }
 
     render() {
+        let scale = this.playground.scale;
         this.ctx.beginPath();
-        this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+        this.ctx.arc(this.x * scale, this.y * scale, this.radius * scale, 0, Math.PI * 2, false);
         this.ctx.fillStyle = this.color;
         this.ctx.fill();
     }
@@ -430,6 +446,7 @@ class AcGamePlayground {
             <div class="ac-game-playground"></div>
         `);
         this.hide();
+        this.root.$ac_game.append(this.$playground);
 
         this.start();
     }
@@ -450,21 +467,39 @@ class AcGamePlayground {
     }
 
     start() {
+        let outer = this;
+        $(window).resize(function() {
+            outer.resize();
+        });
+    }
 
+    resize() 
+    {
+        console.log("resize!");
+        this.width = this.$playground.width();
+        this.height = this.$playground.height();
+        let unit = Math.min(this.width / 16, this.height / 9);
+        this.width = unit * 16;
+        this.height = unit * 9;
+        this.scale = this.height;
+
+        if (this.game_map) this.game_map.resize();
     }
 
     show() { // 显示playground界面
         this.$playground.show();
-        this.root.$ac_game.append(this.$playground);
+
+        this.resize();
+
         this.width = this.$playground.width();
         this.height = this.$playground.height();
         this.game_map = new GameMap(this);
         this.players = [];
-        this.players.push(new Player(this, this.width / 2, this.height / 2, this.height * 0.05, "white", this.height * 0.30, true));
+        this.players.push(new Player(this, this.width / 2 / this.scale, this.height / 2 / this.scale, this.height * 0.05 / this.scale, "white", this.height * 0.30 / this.scale, true));
 
         for(let i = 0; i < 5; i++)
         {
-            this.players.push(new Player(this, this.width * this.restrict(), this.height * this.restrict(), this.height * 0.05, this.get_random_color(), this.height * 0.30, false))
+            this.players.push(new Player(this, this.width * this.restrict() / this.scale, this.height * this.restrict() / this.scale, this.height * 0.05 / this.scale, this.get_random_color(), this.height * 0.30 / this.scale, false))
         }
     }
 
