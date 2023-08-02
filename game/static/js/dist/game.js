@@ -63,6 +63,15 @@ class AcGameObject {
 
         this.has_called_start = false;  // 是否执行过start函数
         this.timedelta = 0; // 当前帧距离上一帧的时间间隔
+        this.uuid = this.create_uuid();
+    }
+
+    create_uuid() {
+        let res = "";
+        for (let i = 0; i < 16; i++) {
+            res += Math.floor(Math.random() * 10).toString();
+        }
+        return res;
     }
 
     start() {  // 只会在第一帧执行一次
@@ -178,6 +187,7 @@ class GameMap extends AcGameObject {
     }
 }class Player extends AcGameObject {
     constructor(playground, x, y, radius, color, speed, character, username, photo) {
+
         super();
         this.playground = playground;
         this.ctx = this.playground.game_map.ctx;
@@ -444,7 +454,69 @@ class FireBall extends AcGameObject {
         this.ctx.fill();
     }
 }
-class AcGamePlayground {
+class MutiPlayerSocket {
+    constructor(playground) {
+        this.playground = playground;
+
+        this.ws = new WebSocket("wss://app5745.acapp.acwing.com.cn/wss/mutiplayer/");
+        this.uuid = null;
+
+        this.start();
+    }
+
+    start() {
+        this.receive();
+    }
+
+    receive() {
+        // Receive messages from the server
+        let outer = this;
+
+        // When the server sends a message, the client receives and processes it
+        this.ws.onmessage = function (e) {
+            let data = JSON.parse(e.data); // Parse the message sent by the server
+            let uuid = data.uuid;
+            // If the uuid of the message is the same as the uuid of the client,
+            // It means that the message is sent by the client itself, so it is not processed
+            if (uuid === outer.uuid) return false;
+
+            let event = data.event;
+
+            // this.players.push(new Player(this, this.width / 2 / this.scale, this.height / 2 / this.scale, this.height * 0.05 / this.scale, "white", this.height * 0.30 / this.scale, "me", this.root.settings.username, this.root.settings.photo));
+            if (event === "create_player") {
+                outer.receive_create_player(uuid, data.username, data.photo);
+            }
+        };
+    }
+    
+    send_create_player(username, photo) {
+        // Send a message to the server to create a player with some information
+        let outer = this;
+        this.ws.send(JSON.stringify({
+            'event': "create_player",
+            'uuid': outer.uuid,
+            'username': username,
+            'photo': photo,
+        }));
+    }
+
+    receive_create_player(uuid, username, photo) {
+        let player = new Player(
+            this.playground,
+            this.playground.width / 2 / this.playground.scale,
+            this.playground.height / 2 / this.playground.scale,
+            this.playground.height * 0.05 / this.playground.scale,
+            "white",
+            this.playground.height * 0.30 / this.playground.scale,
+            "enemy",
+            username,
+            photo,
+        );
+
+        player.uuid = uuid;
+        this.playground.players.push(player);
+    }
+}class AcGamePlayground {
     constructor(root) {
         this.root = root;
         this.$playground = $(`
@@ -492,6 +564,7 @@ class AcGamePlayground {
     }
 
     show(mode) { // 显示playground界面
+        let outer = this;
         this.$playground.show();
 
         this.width = this.$playground.width();
@@ -508,6 +581,15 @@ class AcGamePlayground {
             for (let i = 0; i < 5; i ++ ) {
                 this.players.push(new Player(this, this.width * this.restrict() / this.scale, this.height * this.restrict() / this.scale, this.height * 0.05 / this.scale, this.get_random_color(), this.height * 0.30 / this.scale, "robot"));
             }
+        }
+        else if (mode === "multi mode") {
+            this.mps = new MutiPlayerSocket(this); // Create a socket for a multiplayer game
+            this.mps.uuid = this.players[0].uuid;  // Set the uuid of the socket to the uuid of the player
+
+            this.mps.ws.onopen = function() {
+                // use the api to create a player with a username and avatar
+                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo); 
+            };
         }
     }
 

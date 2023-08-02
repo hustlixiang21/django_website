@@ -46,6 +46,7 @@ class AcGamePlayground {
     }
 
     show(mode) { // 显示playground界面
+        let outer = this;
         this.$playground.show();
 
         this.width = this.$playground.width();
@@ -62,6 +63,15 @@ class AcGamePlayground {
             for (let i = 0; i < 5; i ++ ) {
                 this.players.push(new Player(this, this.width * this.restrict() / this.scale, this.height * this.restrict() / this.scale, this.height * 0.05 / this.scale, this.get_random_color(), this.height * 0.30 / this.scale, "robot"));
             }
+        }
+        else if (mode === "multi mode") {
+            this.mps = new MutiPlayerSocket(this); // Create a socket for a multiplayer game
+            this.mps.uuid = this.players[0].uuid;  // Set the uuid of the socket to the uuid of the player
+
+            this.mps.ws.onopen = function() {
+                // use the api to create a player with a username and avatar
+                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo); 
+            };
         }
     }
 
