@@ -16,6 +16,9 @@ class AcGameMenu {
             退出
         </div>
     </div>
+    <div class="footer">
+        <a href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2023017825号</a>
+    </div>
 </div>
 `);
         this.$menu.hide();

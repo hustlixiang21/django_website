@@ -19,21 +19,19 @@ class AcGamePlayground {
         return random;
     }
 
-    get_random_color()
-    {
+    get_random_color() {
         let colors = ["deepskyblue", "yellow", "Lime", "deeppink", "fuchsia", "red", "aqua", "coral", "gold"];
         return colors[Math.floor(Math.random() * colors.length)];
     }
 
     start() {
         let outer = this;
-        $(window).resize(function() {
+        $(window).resize(function () {
             outer.resize();
         });
     }
 
-    resize() 
-    {
+    resize() {
         this.width = this.$playground.width();
         this.height = this.$playground.height();
         let unit = Math.min(this.width / 16, this.height / 9);
@@ -58,8 +56,9 @@ class AcGamePlayground {
         this.players.push(new Player(this, this.width / 2 / this.scale, this.height / 2 / this.scale, this.height * 0.05 / this.scale, "white", this.height * 0.30 / this.scale, "me", this.root.settings.username, this.root.settings.photo));
 
 
+        this.mode = mode; // single mode or multi mode
         if (mode === "single mode") {
-            for (let i = 0; i < 5; i ++ ) {
+            for (let i = 0; i < 5; i++) {
                 this.players.push(new Player(this, this.width * this.restrict() / this.scale, this.height * this.restrict() / this.scale, this.height * 0.05 / this.scale, this.get_random_color(), this.height * 0.30 / this.scale, "robot"));
             }
         }
@@ -67,9 +66,9 @@ class AcGamePlayground {
             this.mps = new MutiPlayerSocket(this); // Create a socket for a multiplayer game
             this.mps.uuid = this.players[0].uuid;  // Set the uuid of the socket to the uuid of the player
 
-            this.mps.ws.onopen = function() {
+            this.mps.ws.onopen = function () {
                 // use the api to create a player with a username and avatar
-                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo); 
+                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo);
             };
         }
     }

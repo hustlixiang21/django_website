@@ -16,6 +16,9 @@ class AcGameMenu {
             退出
         </div>
     </div>
+    <div class="footer">
+        <a href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2023017825号</a>
+    </div>
 </div>
 `);
         this.$menu.hide();
@@ -187,7 +190,6 @@ class GameMap extends AcGameObject {
     }
 }class Player extends AcGameObject {
     constructor(playground, x, y, radius, color, speed, character, username, photo) {
-
         super();
         this.playground = playground;
         this.ctx = this.playground.game_map.ctx;
@@ -208,6 +210,8 @@ class GameMap extends AcGameObject {
         this.eps = 0.01;
         this.friction = 0.9;
         this.spent_time = 0;
+        this.fireballs = [];
+
         this.cur_skill = null;
 
         this.flag = false; // 用于判断是否已死亡
@@ -221,24 +225,33 @@ class GameMap extends AcGameObject {
     start() {
         if (this.character === "me") {
             this.add_listening_events();
-        } else {
+        } else if (this.character === "robot") {
             let tx = Math.random() * this.playground.width / this.playground.scale;
             let ty = Math.random() * this.playground.height / this.playground.scale;
             this.move_to(tx, ty);
         }
     }
 
-    add_listening_events()
-    {
+    add_listening_events() {
         let outer = this;
-        this.playground.game_map.$canvas.on("contextmenu", function() { return false; });
+        this.playground.game_map.$canvas.on("contextmenu", function () { return false; });
         this.playground.game_map.$canvas.mousedown(function (e) {
             const rect = outer.ctx.canvas.getBoundingClientRect();
             if (e.which === 3) {
-                outer.move_to((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
+                let tx = (e.clientX - rect.left) / outer.playground.scale;
+                let ty = (e.clientY - rect.top) / outer.playground.scale;
+                outer.move_to(tx, ty);
+                if (outer.playground.mode === "multi mode") {
+                    outer.playground.mps.send_move_to(tx, ty);
+                }
             } else if (e.which === 1) {
                 if (outer.cur_skill === "fireball") {
-                    outer.shoot_fireball((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
+                    let tx = (e.clientX - rect.left) / outer.playground.scale;
+                    let ty = (e.clientY - rect.top) / outer.playground.scale;
+                    let fireball = outer.shoot_fireball(tx, ty);
+                    if (outer.playground.mode === "multi mode") {
+                        outer.playground.mps.send_shoot_fireball(tx, ty, fireball.uuid);
+                    }
                 }
                 outer.cur_skill = null;
             }
@@ -262,13 +275,27 @@ class GameMap extends AcGameObject {
         let color = "orange";
         let speed = this.playground.height * 0.6 / this.playground.scale;
         let move_length = this.playground.width * 1.3 / this.playground.scale;
-        new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
+        let fireball = new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
+        this.fireballs.push(fireball);
+
+        return fireball; // need to get the uuid of the fireball
     }
 
     get_dist(x1, y1, x2, y2) {
         let dx = x1 - x2;
         let dy = y1 - y2;
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    destroy_fireball(uuid) {
+        // destroy the fireball with the uuid
+        for (let i = 0; i < this.fireballs.length; i++) {
+            let fireball = this.fireballs[i];
+            if (fireball.uuid === uuid) {
+                fireball.destroy();
+                break;
+            }
+        }
     }
 
     move_to(tx, ty) {
@@ -279,7 +306,7 @@ class GameMap extends AcGameObject {
     }
 
     is_attacked(angle, damage) {
-        for (let i = 0; i < 20 + Math.random() * 10; i ++ ) {
+        for (let i = 0; i < 20 + Math.random() * 10; i++) {
             let x = this.x, y = this.y;
             let radius = this.radius * Math.random() * 0.2;
             let angle = Math.PI * 2 * Math.random();
@@ -307,8 +334,7 @@ class GameMap extends AcGameObject {
         this.render();
     }
 
-    update_move() 
-    {
+    update_move() {
         this.spent_time += this.timedelta / 1000;
         if (this.character === "robot" && this.spent_time > 4 && Math.random() < 1 / 300.0) {
             let player = this.playground.players[Math.floor(Math.random() * this.playground.players.length)];
@@ -338,7 +364,7 @@ class GameMap extends AcGameObject {
                     this.move_to(tx, ty);
                 }
             } else {
-                let moved =  Math.min(this.move_length, this.speed * this.timedelta / 1000);
+                let moved = Math.min(this.move_length, this.speed * this.timedelta / 1000);
                 this.x += this.vx * moved;
                 this.y += this.vy * moved;
                 this.move_length -= moved;
@@ -362,7 +388,15 @@ class GameMap extends AcGameObject {
             this.ctx.fillStyle = this.color;
             this.ctx.fill();
         }
+    }
 
+    on_destroy() {
+        for (let i = 0; i < this.playground.players.length; i ++ ) {
+            if (this.playground.players[i] === this) {
+                this.playground.players.splice(i, 1);
+                break;
+            }
+        }
     }
 }
 class FireBall extends AcGameObject {
@@ -393,11 +427,32 @@ class FireBall extends AcGameObject {
             return false;
         }
 
+        this.update_move();
+        this.fireball_collision();
+        this.update_attack();
+
+        this.render();
+    }
+
+    update_move() {
         let moved = Math.min(this.move_length, this.speed * this.timedelta / 1000);
         this.x += this.vx * moved;
         this.y += this.vy * moved;
         this.move_length -= moved;
+    }
 
+    update_attack() {
+        for (let i = 0; i < this.playground.players.length; i ++ ) {
+            let player = this.playground.players[i];
+            if (this.player !== player && this.is_collision(player)) {
+                this.attack(player);
+                break;
+            }
+        }
+    }
+
+    fireball_collision() {
+        // fireball collides with other fireballs, it will destroy both of them
         for (let i = 0; i < AC_GAME_OBJECTS.length; i++)
         {
             let gameobject = AC_GAME_OBJECTS[i];
@@ -417,15 +472,6 @@ class FireBall extends AcGameObject {
                 }
             }
         }
-
-        for (let i = 0; i < this.playground.players.length; i++) {
-            let player = this.playground.players[i];
-            if (this.player !== player && this.is_collision(player)) {
-                this.attack(player);
-            }
-        }
-
-        this.render();
     }
 
     get_dist(x1, y1, x2, y2) {
@@ -453,12 +499,22 @@ class FireBall extends AcGameObject {
         this.ctx.fillStyle = this.color;
         this.ctx.fill();
     }
+
+    on_destroy() {
+        let fireballs = this.player.fireballs;
+        for (let i = 0; i < fireballs.length; i ++ ) {
+            if (fireballs[i] === this) {
+                fireballs.splice(i, 1);
+                break;
+            }
+        }
+    }
 }
 class MutiPlayerSocket {
     constructor(playground) {
         this.playground = playground;
 
-        this.ws = new WebSocket("wss://app5745.acapp.acwing.com.cn/wss/mutiplayer/");
+        this.ws = new WebSocket("wss://strivelee.com/wss/mutiplayer/");
         this.uuid = null;
 
         this.start();
@@ -486,11 +542,26 @@ class MutiPlayerSocket {
             if (event === "create_player") {
                 outer.receive_create_player(uuid, data.username, data.photo);
             }
+            else if (event === "move_to") {
+                outer.receive_move_to(uuid, data.tx, data.ty);
+            }
+            else if (event === "shoot_fireball") {
+                outer.receive_shoot_fireball(uuid, data.tx, data.ty, data.ball_uuid);
+            }
         };
     }
-    
+
+    get_player(uuid) {
+        // Get the player object by uuid
+        for (let i = 0; i < this.playground.players.length; i++) {
+            if (this.playground.players[i].uuid === uuid) {
+                return this.playground.players[i];
+            }
+        }
+    }
+
     send_create_player(username, photo) {
-        // Send a message to the server to create a player with some information
+        // Send a message to the server for others to create you with some information
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "create_player",
@@ -501,6 +572,7 @@ class MutiPlayerSocket {
     }
 
     receive_create_player(uuid, username, photo) {
+        // Receive a message from the server to create another player with some information
         let player = new Player(
             this.playground,
             this.playground.width / 2 / this.playground.scale,
@@ -515,6 +587,50 @@ class MutiPlayerSocket {
 
         player.uuid = uuid;
         this.playground.players.push(player);
+    }
+
+    send_move_to(tx, ty) {
+        // Send a message to the server to move the player to a certain position
+        let outer = this;
+        this.ws.send(JSON.stringify({
+            'event': "move_to",
+            'uuid': outer.uuid,
+            'tx': tx,
+            'ty': ty,
+        }));
+    }
+
+    receive_move_to(uuid, tx, ty) {
+        // Receive a message from the server to move the other player to a certain position
+        let player = this.get_player(uuid);
+
+        // if the player is not found, oversee it
+        if (player) {
+            player.move_to(tx, ty);
+        }
+    }
+
+    send_shoot_fireball(tx, ty, ball_uuid) {
+        // Send a message to the server to shoot a fireball
+        let outer = this;
+        this.ws.send(JSON.stringify({
+            'event': "shoot_fireball",
+            'uuid': outer.uuid,
+            'tx': tx,
+            'ty': ty,
+            'ball_uuid': ball_uuid,
+        }));
+    }
+
+    receive_shoot_fireball(uuid, tx, ty, ball_uuid) {
+        // Receive a message from the server to shoot a fireball
+        let player = this.get_player(uuid);
+
+        // if the player is not found, oversee it
+        if (player) {
+            let fireball = player.shoot_fireball(tx, ty, ball_uuid);
+            fireball.uuid = ball_uuid;
+        }
     }
 }class AcGamePlayground {
     constructor(root) {
@@ -537,22 +653,19 @@ class MutiPlayerSocket {
         return random;
     }
 
-    get_random_color()
-    {
+    get_random_color() {
         let colors = ["deepskyblue", "yellow", "Lime", "deeppink", "fuchsia", "red", "aqua", "coral", "gold"];
         return colors[Math.floor(Math.random() * colors.length)];
     }
 
     start() {
         let outer = this;
-        $(window).resize(function() {
+        $(window).resize(function () {
             outer.resize();
         });
     }
 
-    resize() 
-    {
-        console.log("resize!");
+    resize() {
         this.width = this.$playground.width();
         this.height = this.$playground.height();
         let unit = Math.min(this.width / 16, this.height / 9);
@@ -577,8 +690,9 @@ class MutiPlayerSocket {
         this.players.push(new Player(this, this.width / 2 / this.scale, this.height / 2 / this.scale, this.height * 0.05 / this.scale, "white", this.height * 0.30 / this.scale, "me", this.root.settings.username, this.root.settings.photo));
 
 
+        this.mode = mode; // single mode or multi mode
         if (mode === "single mode") {
-            for (let i = 0; i < 5; i ++ ) {
+            for (let i = 0; i < 5; i++) {
                 this.players.push(new Player(this, this.width * this.restrict() / this.scale, this.height * this.restrict() / this.scale, this.height * 0.05 / this.scale, this.get_random_color(), this.height * 0.30 / this.scale, "robot"));
             }
         }
@@ -586,9 +700,9 @@ class MutiPlayerSocket {
             this.mps = new MutiPlayerSocket(this); // Create a socket for a multiplayer game
             this.mps.uuid = this.players[0].uuid;  // Set the uuid of the socket to the uuid of the player
 
-            this.mps.ws.onopen = function() {
+            this.mps.ws.onopen = function () {
                 // use the api to create a player with a username and avatar
-                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo); 
+                outer.mps.send_create_player(outer.root.settings.username, outer.root.settings.photo);
             };
         }
     }
@@ -599,6 +713,9 @@ class MutiPlayerSocket {
 }
 class Settings {
     constructor(root) {
+        if (window.location.host === "app5745.acapp.acwing.com.cn") {
+            window.location.replace("https://strivelee.com/");
+        }
         this.root = root;
         this.platform = "WEB"
         if (this.root.AcWingOS) this.platform = "ACAPP";
@@ -633,7 +750,7 @@ class Settings {
         </div>
         <br>
         <div class="ac-game-settings-acwing">
-            <img width="30" src="https://app5745.acapp.acwing.com.cn/static/image/settings/AcWing_logo64x64.png">
+            <img width="30" src="https://strivelee.com/static/image/settings/AcWing_logo64x64.png">
             <br>
             <div>
                 AcWing一键登录
@@ -671,12 +788,15 @@ class Settings {
         </div>
         <br>
         <div class="ac-game-settings-acwing">
-            <img width="30" src="https://app5745.acapp.acwing.com.cn/static/image/settings/AcWing_logo64x64.png">
+            <img width="30" src="https://strivelee.com/static/image/settings/AcWing_logo64x64.png">
             <br>
             <div>
                 AcWing一键登录
             </div>
         </div>
+    </div>
+    <div class="footer">
+        <a href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2023017825号</a>
     </div>
 </div>
         `);
@@ -707,12 +827,10 @@ class Settings {
     }
 
     start() {
-        if (this.platform === "ACAPP")
-        {
+        if (this.platform === "ACAPP") {
             this.getinfo_acapp();
         }
-        else 
-        {
+        else {
             this.getinfo_web();
             this.add_listening_events();
         }
@@ -722,9 +840,9 @@ class Settings {
         let outer = this;
 
         $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/acwing/acapp/apply_code/",
+            url: "https://strivelee.com/settings/acwing/acapp/apply_code/",
             type: "GET",
-            success: function(resp) {
+            success: function (resp) {
                 if (resp.result === "success") {
                     outer.acapp_login(resp.appid, resp.redirect_uri, resp.scope, resp.state);
                 }
@@ -735,13 +853,12 @@ class Settings {
     getinfo_web() {
         let outer = this;
         $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/getinfo/",
+            url: "https://strivelee.com/settings/getinfo/",
             type: "GET",
             data: {
                 platform: outer.platform,
             },
             success: function (resp) {
-                console.log(resp);
                 if (resp.result === "success") {
                     outer.username = resp.username;
                     outer.photo = resp.photo;
@@ -759,7 +876,7 @@ class Settings {
         this.add_listening_events_login();
         this.add_listening_events_register();
 
-        this.$acwing_login.click(function() {
+        this.$acwing_login.click(function () {
             outer.acwing_login();
         });
     }
@@ -767,9 +884,7 @@ class Settings {
     acapp_login(appid, redirect_uri, scope, state) {
         let outer = this;
 
-        this.root.AcWingOS.api.oauth2.authorize(appid, redirect_uri, scope, state, function(resp) {
-            console.log("called from acapp_login function");
-            console.log(resp);
+        this.root.AcWingOS.api.oauth2.authorize(appid, redirect_uri, scope, state, function (resp) {
             if (resp.result === "success") {
                 outer.username = resp.username;
                 outer.photo = resp.photo;
@@ -781,10 +896,9 @@ class Settings {
 
     acwing_login() {
         $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/acwing/web/apply_code/",
+            url: "https://strivelee.com/settings/acwing/web/apply_code/",
             type: "GET",
-            success: function(resp) {
-                console.log(resp);
+            success: function (resp) {
                 if (resp.result === "success") {
                     window.location.replace(resp.apply_code_url);
                 }
@@ -795,24 +909,24 @@ class Settings {
     add_listening_events_login() {
         let outer = this;
 
-        this.$login_register.click(function() {
+        this.$login_register.click(function () {
             outer.register();
         });
 
-        this.$login_submit.click(function() {
+        this.$login_submit.click(function () {
             outer.login_on_remote();
         });
     }
 
     add_listening_events_register() {
-    
+
         let outer = this;
 
-        this.$register_login.click(function() {
+        this.$register_login.click(function () {
             outer.login();
         });
 
-        this.$register_submit.click(function() {
+        this.$register_submit.click(function () {
             outer.register_on_remote();
         });
     }
@@ -823,14 +937,13 @@ class Settings {
         let password = this.$login_password.val();
         this.$login_error_message.empty();
         $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/login/",
+            url: "https://strivelee.com/settings/login/",
             type: "GET",
             data: {
                 username: username,
                 password: password,
             },
-            success: function(resp) {
-                console.log(resp);
+            success: function (resp) {
                 if (resp.result === "success") {
                     location.reload();
                 } else {
@@ -848,15 +961,14 @@ class Settings {
         this.$register_error_message.empty();
 
         $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/register/",
+            url: "https://strivelee.com/settings/register/",
             type: "GET",
             data: {
                 username: username,
                 password: password,
                 password_confirm: password_confirm,
             },
-            success: function(resp) {
-                console.log(resp);
+            success: function (resp) {
                 if (resp.result === "success") {
                     location.reload();  // 刷新页面
                 } else {
@@ -867,18 +979,22 @@ class Settings {
     }
 
     logout_on_remote() {
-        if (this.platform === "ACAPP") return false;
-
-        $.ajax({
-            url: "https://app5745.acapp.acwing.com.cn/settings/logout",
-            type: "GET",
-            success: function(resp) {
-                console.log(resp);
-                if (resp.result === "success") {
-                    location.reload();
+        // 退出登录来自于AcWingOS的话直接关闭窗口
+        if (this.platform === "ACAPP") {
+            this.root.AcWingOS.api.window.close();
+        }
+        else {
+            $.ajax({
+                url: "https://strivelee.com/settings/logout",
+                type: "GET",
+                success: function (resp) {
+                    if (resp.result === "success") {
+                        location.reload();
+                    }
                 }
-            }
-        });
+            });
+        }
+
     }
 
     register() {

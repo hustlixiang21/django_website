@@ -3,7 +3,6 @@ import json
 from django.conf import settings
 from django.core.cache import cache
 
-
 class MultiPlayer(AsyncWebsocketConsumer):
     async def connect(self):
         """
@@ -42,6 +41,7 @@ class MultiPlayer(AsyncWebsocketConsumer):
             )
 
         # add the currently connected channel to a specified group.
+        # the channel_name is the unique identifier for a websocket connection accepted by server 
         await self.channel_layer.group_add(self.room_name, self.channel_name)
 
     async def disconnect(self, close_code):
@@ -61,10 +61,11 @@ class MultiPlayer(AsyncWebsocketConsumer):
         cache.set(self.room_name, players, 3600)  # set expire time to 1 hour  
 
         # send message to all players in the room
+        # 当这个事件被发送后，组中的所有通道都会收到这个事件，并调用group_send_event方法来处理这个事件。
         await self.channel_layer.group_send(
             self.room_name,
             {
-                "type": "group_create_player",
+                "type": "group_send_event",
                 "event": "create_player",  # create player event
                 "uuid": data["uuid"],  # player uuid
                 "username": data["username"],  # player username
@@ -72,12 +73,42 @@ class MultiPlayer(AsyncWebsocketConsumer):
             }
         )   
 
-    async def group_create_player(self, data):
+    async def move_to(self, data):
         """
-        coperate with create_player function to receive message from new player 
+        send to all players to move the player to the specified position
+        """
+        await self.channel_layer.group_send(
+            self.room_name,
+            {
+                "type": "group_send_event",
+                "event": "move_to",  # move to event
+                "uuid": data["uuid"],  # player uuid
+                "tx": data["tx"],  # player x position
+                "ty": data["ty"],  # player y position
+            }
+        )
+
+    async def shoot_fireball(self, data):
+        """
+        send to all players to shoot a fireball
+        """
+        await self.channel_layer.group_send(
+            self.room_name,
+            {
+                "type": "group_send_event",
+                "event": "shoot_fireball",  # shoot fireball event
+                "uuid": data["uuid"],  # player uuid
+                "tx": data["tx"],  # target x position
+                "ty": data["ty"],  # target y position
+                "ball_uuid": data["ball_uuid"],  # fireball uuid
+            }
+        )
+
+    async def group_send_event(self, data):
+        """
+        send message to all players in one room
         """
         await self.send(text_data=json.dumps(data)) # send message to client
-        
 
     async def receive(self, text_data):
         """
@@ -87,4 +118,8 @@ class MultiPlayer(AsyncWebsocketConsumer):
         event = data['event']
         if event == "create_player":
             await self.create_player(data)
+        elif event == "move_to":
+            await self.move_to(data)
+        elif event == "shoot_fireball":
+            await self.shoot_fireball(data)
 

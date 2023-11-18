@@ -1,6 +1,5 @@
 class Player extends AcGameObject {
     constructor(playground, x, y, radius, color, speed, character, username, photo) {
-
         super();
         this.playground = playground;
         this.ctx = this.playground.game_map.ctx;
@@ -21,6 +20,8 @@ class Player extends AcGameObject {
         this.eps = 0.01;
         this.friction = 0.9;
         this.spent_time = 0;
+        this.fireballs = [];
+
         this.cur_skill = null;
 
         this.flag = false; // 用于判断是否已死亡
@@ -34,24 +35,33 @@ class Player extends AcGameObject {
     start() {
         if (this.character === "me") {
             this.add_listening_events();
-        } else {
+        } else if (this.character === "robot") {
             let tx = Math.random() * this.playground.width / this.playground.scale;
             let ty = Math.random() * this.playground.height / this.playground.scale;
             this.move_to(tx, ty);
         }
     }
 
-    add_listening_events()
-    {
+    add_listening_events() {
         let outer = this;
-        this.playground.game_map.$canvas.on("contextmenu", function() { return false; });
+        this.playground.game_map.$canvas.on("contextmenu", function () { return false; });
         this.playground.game_map.$canvas.mousedown(function (e) {
             const rect = outer.ctx.canvas.getBoundingClientRect();
             if (e.which === 3) {
-                outer.move_to((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
+                let tx = (e.clientX - rect.left) / outer.playground.scale;
+                let ty = (e.clientY - rect.top) / outer.playground.scale;
+                outer.move_to(tx, ty);
+                if (outer.playground.mode === "multi mode") {
+                    outer.playground.mps.send_move_to(tx, ty);
+                }
             } else if (e.which === 1) {
                 if (outer.cur_skill === "fireball") {
-                    outer.shoot_fireball((e.clientX - rect.left) / outer.playground.scale, (e.clientY - rect.top) / outer.playground.scale);
+                    let tx = (e.clientX - rect.left) / outer.playground.scale;
+                    let ty = (e.clientY - rect.top) / outer.playground.scale;
+                    let fireball = outer.shoot_fireball(tx, ty);
+                    if (outer.playground.mode === "multi mode") {
+                        outer.playground.mps.send_shoot_fireball(tx, ty, fireball.uuid);
+                    }
                 }
                 outer.cur_skill = null;
             }
@@ -75,13 +85,27 @@ class Player extends AcGameObject {
         let color = "orange";
         let speed = this.playground.height * 0.6 / this.playground.scale;
         let move_length = this.playground.width * 1.3 / this.playground.scale;
-        new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
+        let fireball = new FireBall(this.playground, this, x, y, radius, vx, vy, color, speed, move_length, this.playground.height * 0.01 / this.playground.scale);
+        this.fireballs.push(fireball);
+
+        return fireball; // need to get the uuid of the fireball
     }
 
     get_dist(x1, y1, x2, y2) {
         let dx = x1 - x2;
         let dy = y1 - y2;
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    destroy_fireball(uuid) {
+        // destroy the fireball with the uuid
+        for (let i = 0; i < this.fireballs.length; i++) {
+            let fireball = this.fireballs[i];
+            if (fireball.uuid === uuid) {
+                fireball.destroy();
+                break;
+            }
+        }
     }
 
     move_to(tx, ty) {
@@ -92,7 +116,7 @@ class Player extends AcGameObject {
     }
 
     is_attacked(angle, damage) {
-        for (let i = 0; i < 20 + Math.random() * 10; i ++ ) {
+        for (let i = 0; i < 20 + Math.random() * 10; i++) {
             let x = this.x, y = this.y;
             let radius = this.radius * Math.random() * 0.2;
             let angle = Math.PI * 2 * Math.random();
@@ -120,8 +144,7 @@ class Player extends AcGameObject {
         this.render();
     }
 
-    update_move() 
-    {
+    update_move() {
         this.spent_time += this.timedelta / 1000;
         if (this.character === "robot" && this.spent_time > 4 && Math.random() < 1 / 300.0) {
             let player = this.playground.players[Math.floor(Math.random() * this.playground.players.length)];
@@ -151,7 +174,7 @@ class Player extends AcGameObject {
                     this.move_to(tx, ty);
                 }
             } else {
-                let moved =  Math.min(this.move_length, this.speed * this.timedelta / 1000);
+                let moved = Math.min(this.move_length, this.speed * this.timedelta / 1000);
                 this.x += this.vx * moved;
                 this.y += this.vy * moved;
                 this.move_length -= moved;
@@ -175,6 +198,14 @@ class Player extends AcGameObject {
             this.ctx.fillStyle = this.color;
             this.ctx.fill();
         }
+    }
 
+    on_destroy() {
+        for (let i = 0; i < this.playground.players.length; i ++ ) {
+            if (this.playground.players[i] === this) {
+                this.playground.players.splice(i, 1);
+                break;
+            }
+        }
     }
 }

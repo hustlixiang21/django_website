@@ -13,7 +13,7 @@ def get_state(): # 获取8位随机数
 
 def apply_code(request):
     appid = 5745
-    redirect_uri = quote("https://app5745.acapp.acwing.com.cn/settings/acwing/web/receive_code")  # 重定向链接，收到授权码之后的跳转
+    redirect_uri = quote("https://strivelee.com/settings/acwing/web/receive_code")  # 重定向链接，收到授权码之后的跳转
     scope = "userinfo"
     state = get_state()  # 生成s
 
