@@ -27,8 +27,35 @@ class FireBall extends AcGameObject {
         }
 
         this.update_move();
+        this.fireball_collision();
+        
+        // 判断放在自己的窗口里，敌人不进行判断
+        if (this.player.character !== "enemy") {
+            this.update_attack();
+        }
 
-        // 这是用来判断两个火球之间是否碰撞
+        this.render();
+    }
+
+    update_move() {
+        let moved = Math.min(this.move_length, this.speed * this.timedelta / 1000);
+        this.x += this.vx * moved;
+        this.y += this.vy * moved;
+        this.move_length -= moved;
+    }
+
+    update_attack() {
+        for (let i = 0; i < this.playground.players.length; i ++ ) {
+            let player = this.playground.players[i];
+            if (this.player !== player && this.is_collision(player)) {
+                this.attack(player);
+                break;
+            }
+        }
+    }
+
+    fireball_collision() {
+        // fireball collides with other fireballs, it will destroy both of them
         for (let i = 0; i < AC_GAME_OBJECTS.length; i++)
         {
             let gameobject = AC_GAME_OBJECTS[i];
@@ -48,27 +75,6 @@ class FireBall extends AcGameObject {
                 }
             }
         }
-
-        this.update_attack();
-
-        this.render();
-    }
-
-    update_move() {
-        let moved = Math.min(this.move_length, this.speed * this.timedelta / 1000);
-        this.x += this.vx * moved;
-        this.y += this.vy * moved;
-        this.move_length -= moved;
-    }
-
-    update_attack() {
-        for (let i = 0; i < this.playground.players.length; i++) {
-            let player = this.playground.players[i];
-            if (this.player !== player && this.is_collision(player)) {
-                this.attack(player);
-            }
-        }
-
     }
 
     get_dist(x1, y1, x2, y2) {
@@ -86,6 +92,11 @@ class FireBall extends AcGameObject {
     attack(player) {
         let angle = Math.atan2(player.y - this.y, player.x - this.x);
         player.is_attacked(angle, this.damage);
+
+        if (this.playground.mode === "multi mode") {
+            this.playground.mps.send_attack(player.uuid, player.x, player.y, angle, this.damage, this.uuid);
+        }
+
         this.destroy();
     }
 
@@ -99,7 +110,7 @@ class FireBall extends AcGameObject {
 
     on_destroy() {
         let fireballs = this.player.fireballs;
-        for (let i = 0; i < fireballs.length; i++) {
+        for (let i = 0; i < fireballs.length; i ++ ) {
             if (fireballs[i] === this) {
                 fireballs.splice(i, 1);
                 break;

@@ -104,6 +104,40 @@ class MultiPlayer(AsyncWebsocketConsumer):
             }
         )
 
+    async def attack(self, data):
+        """
+        send to all players to attack
+        """
+        await self.channel_layer.group_send(
+            self.room_name,
+            {
+                "type": "group_send_event",
+                "event": "attack",  # attack event
+                "uuid": data["uuid"],  # player uuid
+                "attackee_uuid": data["attackee_uuid"],  # attackee uuid
+                "x": data["x"],  # target x position
+                "y": data["y"],  # target y position
+                "angle": data["angle"],  # attack angle
+                "damage": data["damage"],  # attack damage
+                "ball_uuid": data["ball_uuid"],  # fireball uuid
+            }
+        )
+
+    async def blink(self, data):
+        """
+        send to all players to blink
+        """
+        await self.channel_layer.group_send(
+            self.room_name,
+            {
+                "type": "group_send_event",
+                "event": "blink",  # blink event
+                "uuid": data["uuid"],  # player uuid
+                "tx": data["tx"],  # target x position
+                "ty": data["ty"],  # target y position
+            }
+        )
+
     async def group_send_event(self, data):
         """
         send message to all players in one room
@@ -122,4 +156,8 @@ class MultiPlayer(AsyncWebsocketConsumer):
             await self.move_to(data)
         elif event == "shoot_fireball":
             await self.shoot_fireball(data)
+        elif event == "attack":
+            await self.attack(data)
+        elif event == "blink":
+            await self.blink(data)
 
