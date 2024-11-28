@@ -3,151 +3,155 @@ import json
 from django.conf import settings
 from django.core.cache import cache
 
+from thrift import Thrift
+from thrift.transport import TSocket
+from thrift.transport import TTransport
+from thrift.protocol import TBinaryProtocol
+
+from match_system.src.match_server.match_service import Match
+from game.models.player.player import Player
+from channels.db import database_sync_to_async
+
 class MultiPlayer(AsyncWebsocketConsumer):
     async def connect(self):
-        """
-        connect to server, create a room and add player to the room
-        """
-        self.room_name = None
-
-        # loop 1000 times to find a room
-        for i in range(1000):
-            name = "room-%d" % i
-            # if room not exists or room is not full
-            if not cache.has_key(name) or len(cache.get(name)) < settings.ROOM_CAPACITY:
-                self.room_name = name
-                break
-
-        if not self.room_name:  # no room available
-            return
-        
-        await self.accept()  # build connection
-
-        # create room if not exists
-        if not cache.has_key(self.room_name):
-            cache.set(self.room_name, [], 3600)  # set expire time to 1 hour
-
-        # send message to all players in the room
-        for player in cache.get(self.room_name):
-            await self.send(
-                text_data=json.dumps(
-                    {
-                        "event": "create_player",  # create player event
-                        "uuid": player["uuid"],  # player uuid
-                        "username": player["username"],  # player username
-                        "photo": player["photo"],  # player photo
-                    }
-                )
-            )
-
-        # add the currently connected channel to a specified group.
-        # the channel_name is the unique identifier for a websocket connection accepted by server 
-        await self.channel_layer.group_add(self.room_name, self.channel_name)
+        await self.accept()
 
     async def disconnect(self, close_code):
-        print("disconnect")
-        await self.channel_layer.group_discard(self.room_name, self.channel_name)
+        if self.room_name:
+            await self.channel_layer.group_discard(self.room_name, self.channel_name);
+
 
     async def create_player(self, data):
-        """
-        when the event is create player, create the player according to the data
-        """
-        players = cache.get(self.room_name) # get players in the room
-        players.append({
-            'uuid': data["uuid"],
-            'username': data["username"],
-            'photo': data["photo"],
-        }) # add new player to the room
-        cache.set(self.room_name, players, 3600)  # set expire time to 1 hour  
+        self.room_name = None
+        self.uuid = data['uuid']
+        # Make socket
+        transport = TSocket.TSocket('127.0.0.1', 9090)
+        # Buffering is critical. Raw sockets are very slow
+        transport = TTransport.TBufferedTransport(transport)
 
-        # send message to all players in the room
-        # 当这个事件被发送后，组中的所有通道都会收到这个事件，并调用group_send_event方法来处理这个事件。
-        await self.channel_layer.group_send(
-            self.room_name,
-            {
-                "type": "group_send_event",
-                "event": "create_player",  # create player event
-                "uuid": data["uuid"],  # player uuid
-                "username": data["username"],  # player username
-                "photo": data["photo"],  # player photo
-            }
-        )   
+        # Wrap in a protocol
+        protocol = TBinaryProtocol.TBinaryProtocol(transport)
+
+        # Create a client to use the protocol encoder
+        client = Match.Client(protocol)
+
+        def db_get_player():
+            return Player.objects.get(user__username=data['username'])
+
+        player = await database_sync_to_async(db_get_player)()
+
+        # Connect!
+        transport.open()
+
+        client.add_player(player.score, data['uuid'], data['username'], data['photo'], self.channel_name)
+
+        # Close!
+        transport.close()
+
+
+    async def group_send_event(self, data):
+        if not self.room_name:
+            keys = cache.keys('*%s*' % (self.uuid))
+            if keys:
+                self.room_name = keys[0]
+        await self.send(text_data=json.dumps(data))
 
     async def move_to(self, data):
-        """
-        send to all players to move the player to the specified position
-        """
         await self.channel_layer.group_send(
             self.room_name,
             {
-                "type": "group_send_event",
-                "event": "move_to",  # move to event
-                "uuid": data["uuid"],  # player uuid
-                "tx": data["tx"],  # player x position
-                "ty": data["ty"],  # player y position
+                'type': "group_send_event",
+                'event': "move_to",
+                'uuid': data['uuid'],
+                'tx': data['tx'],
+                'ty': data['ty'],
             }
         )
 
     async def shoot_fireball(self, data):
-        """
-        send to all players to shoot a fireball
-        """
         await self.channel_layer.group_send(
             self.room_name,
             {
-                "type": "group_send_event",
-                "event": "shoot_fireball",  # shoot fireball event
-                "uuid": data["uuid"],  # player uuid
-                "tx": data["tx"],  # target x position
-                "ty": data["ty"],  # target y position
-                "ball_uuid": data["ball_uuid"],  # fireball uuid
+                'type': "group_send_event",
+                'event': "shoot_fireball",
+                'uuid': data['uuid'],
+                'tx': data['tx'],
+                'ty': data['ty'],
+                'ball_uuid': data['ball_uuid'],
             }
         )
 
     async def attack(self, data):
-        """
-        send to all players to attack
-        """
+        if not self.room_name:
+            return
+        players = cache.get(self.room_name)
+
+        if not players:
+            return
+
+        for player in players:
+            if player['uuid'] == data['attackee_uuid']:
+                player['hp'] -= 25
+
+        remain_cnt = 0
+        for player in players:
+            if player['hp'] > 0:
+                remain_cnt += 1
+
+        if remain_cnt > 1:
+            if self.room_name:
+                cache.set(self.room_name, players, 3600)
+        else:
+            def db_update_player_score(username, score):
+                player = Player.objects.get(user__username=username)
+                player.score += score
+                player.save()
+            for player in players:
+                if player['hp'] <= 0:
+                    await database_sync_to_async(db_update_player_score)(player['username'], -5)
+                else:
+                    await database_sync_to_async(db_update_player_score)(player['username'], 10)
+
         await self.channel_layer.group_send(
             self.room_name,
             {
-                "type": "group_send_event",
-                "event": "attack",  # attack event
-                "uuid": data["uuid"],  # player uuid
-                "attackee_uuid": data["attackee_uuid"],  # attackee uuid
-                "x": data["x"],  # target x position
-                "y": data["y"],  # target y position
-                "angle": data["angle"],  # attack angle
-                "damage": data["damage"],  # attack damage
-                "ball_uuid": data["ball_uuid"],  # fireball uuid
+                'type': "group_send_event",
+                'event': "attack",
+                'uuid': data['uuid'],
+                'attackee_uuid': data['attackee_uuid'],
+                'x': data['x'],
+                'y': data['y'],
+                'angle': data['angle'],
+                'damage': data['damage'],
+                'ball_uuid': data['ball_uuid'],
             }
         )
 
     async def blink(self, data):
-        """
-        send to all players to blink
-        """
         await self.channel_layer.group_send(
             self.room_name,
             {
-                "type": "group_send_event",
-                "event": "blink",  # blink event
-                "uuid": data["uuid"],  # player uuid
-                "tx": data["tx"],  # target x position
-                "ty": data["ty"],  # target y position
+                'type': "group_send_event",
+                'event': "blink",
+                'uuid': data['uuid'],
+                'tx': data['tx'],
+                'ty': data['ty'],
             }
         )
 
-    async def group_send_event(self, data):
-        """
-        send message to all players in one room
-        """
-        await self.send(text_data=json.dumps(data)) # send message to client
+    async def message(self, data):
+        await self.channel_layer.group_send(
+            self.room_name,
+            {
+                'type': "group_send_event",
+                'event': "message",
+                'uuid': data['uuid'],
+                'username': data['username'],
+                'text': data['text'],
+            }
+        )
 
     async def receive(self, text_data):
-        """
-        receive message from client
-        """
         data = json.loads(text_data)
         event = data['event']
         if event == "create_player":
@@ -160,4 +164,5 @@ class MultiPlayer(AsyncWebsocketConsumer):
             await self.attack(data)
         elif event == "blink":
             await self.blink(data)
-
+        elif event == "message":
+            await self.message(data)

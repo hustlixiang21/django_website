@@ -7,16 +7,17 @@ from django.core.cache import cache
 def get_state():
     res = ""
     for i in range(8):
-        res = str(randint(0, 9))
+        res += str(randint(0, 9))
     return res
 
+
 def apply_code(request):
-    appid = 5745
-    redirect_uri = quote("https://strivelee.com/settings/acwing/acapp/receive_code")  # 重定向链接，收到授权码之后的跳转
+    appid = "165"
+    redirect_uri = quote("https://app165.acapp.acwing.com.cn/settings/acwing/acapp/receive_code/")
     scope = "userinfo"
     state = get_state()
 
-    cache.set(state, True, 7200)  # 将state放到redis中，有效期为2小时
+    cache.set(state, True, 7200)   # 有效期2小时
 
     return JsonResponse({
         'result': "success",

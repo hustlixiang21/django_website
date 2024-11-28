@@ -2,14 +2,15 @@ from django.http import JsonResponse
 from game.models.player.player import Player
 
 
+
 def getinfo_acapp(request):
-    user = request.user
-    player = Player.objects.get(user=user)
+    player = Player.objects.all()[0]
     return JsonResponse({
         'result': "success",
         'username': player.user.username,
         'photo': player.photo,
     })
+
 
 
 def getinfo_web(request):
@@ -25,6 +26,7 @@ def getinfo_web(request):
             'username': player.user.username,
             'photo': player.photo,
         })
+
 
 
 def getinfo(request):

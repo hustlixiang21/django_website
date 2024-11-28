@@ -1,9 +1,8 @@
-class MutiPlayerSocket {
+class MultiPlayerSocket {
     constructor(playground) {
         this.playground = playground;
 
-        this.ws = new WebSocket("wss://strivelee.com/wss/mutiplayer/");
-        this.uuid = null;
+        this.ws = new WebSocket("wss://app165.acapp.acwing.com.cn/wss/multiplayer/");
 
         this.start();
     }
@@ -12,50 +11,32 @@ class MutiPlayerSocket {
         this.receive();
     }
 
-    receive() {
-        // Receive messages from the server
+    receive () {
         let outer = this;
 
-        // When the server sends a message, the client receives and processes it
-        this.ws.onmessage = function (e) {
-            let data = JSON.parse(e.data); // Parse the message sent by the server
+        this.ws.onmessage = function(e) {
+            let data = JSON.parse(e.data);
             let uuid = data.uuid;
-            // If the uuid of the message is the same as the uuid of the client,
-            // It means that the message is sent by the client itself, so it is not processed
             if (uuid === outer.uuid) return false;
 
             let event = data.event;
-
-            // this.players.push(new Player(this, this.width / 2 / this.scale, this.height / 2 / this.scale, this.height * 0.05 / this.scale, "white", this.height * 0.30 / this.scale, "me", this.root.settings.username, this.root.settings.photo));
             if (event === "create_player") {
                 outer.receive_create_player(uuid, data.username, data.photo);
-            }
-            else if (event === "move_to") {
+            } else if (event === "move_to") {
                 outer.receive_move_to(uuid, data.tx, data.ty);
-            }
-            else if (event === "shoot_fireball") {
+            } else if (event === "shoot_fireball") {
                 outer.receive_shoot_fireball(uuid, data.tx, data.ty, data.ball_uuid);
-            }
-            else if (event === "attack") {
+            } else if (event === "attack") {
                 outer.receive_attack(uuid, data.attackee_uuid, data.x, data.y, data.angle, data.damage, data.ball_uuid);
-            }
-            else if (event === "blink") {
+            } else if (event === "blink") {
                 outer.receive_blink(uuid, data.tx, data.ty);
+            } else if (event === "message") {
+                outer.receive_message(uuid, data.username, data.text);
             }
         };
     }
 
-    get_player(uuid) {
-        // Get the player object by uuid
-        for (let i = 0; i < this.playground.players.length; i++) {
-            if (this.playground.players[i].uuid === uuid) {
-                return this.playground.players[i];
-            }
-        }
-    }
-
     send_create_player(username, photo) {
-        // Send a message to the server for others to create you with some information
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "create_player",
@@ -65,15 +46,25 @@ class MutiPlayerSocket {
         }));
     }
 
+    get_player(uuid) {
+        let players = this.playground.players;
+        for (let i = 0; i < players.length; i ++ ) {
+            let player = players[i];
+            if (player.uuid === uuid)
+                return player;
+        }
+
+        return null;
+    }
+
     receive_create_player(uuid, username, photo) {
-        // Receive a message from the server to create another player with some information
         let player = new Player(
             this.playground,
             this.playground.width / 2 / this.playground.scale,
-            this.playground.height / 2 / this.playground.scale,
-            this.playground.height * 0.05 / this.playground.scale,
+            0.5,
+            0.05,
             "white",
-            this.playground.height * 0.30 / this.playground.scale,
+            0.15,
             "enemy",
             username,
             photo,
@@ -84,7 +75,6 @@ class MutiPlayerSocket {
     }
 
     send_move_to(tx, ty) {
-        // Send a message to the server to move the player to a certain position
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "move_to",
@@ -95,17 +85,14 @@ class MutiPlayerSocket {
     }
 
     receive_move_to(uuid, tx, ty) {
-        // Receive a message from the server to move the other player to a certain position
         let player = this.get_player(uuid);
 
-        // if the player is not found, oversee it
         if (player) {
             player.move_to(tx, ty);
         }
     }
 
     send_shoot_fireball(tx, ty, ball_uuid) {
-        // Send a message to the server to shoot a fireball
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "shoot_fireball",
@@ -117,18 +104,14 @@ class MutiPlayerSocket {
     }
 
     receive_shoot_fireball(uuid, tx, ty, ball_uuid) {
-        // Receive a message from the server to shoot a fireball
         let player = this.get_player(uuid);
-
-        // if the player is not found, oversee it
         if (player) {
-            let fireball = player.shoot_fireball(tx, ty, ball_uuid);
+            let fireball = player.shoot_fireball(tx, ty);
             fireball.uuid = ball_uuid;
         }
     }
 
     send_attack(attackee_uuid, x, y, angle, damage, ball_uuid) {
-        // Send a message to the server to attack other players
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "attack",
@@ -143,16 +126,15 @@ class MutiPlayerSocket {
     }
 
     receive_attack(uuid, attackee_uuid, x, y, angle, damage, ball_uuid) {
-        // Receive a message from the server to attack other players
         let attacker = this.get_player(uuid);
         let attackee = this.get_player(attackee_uuid);
+
         if (attacker && attackee) {
             attackee.receive_attack(x, y, angle, damage, ball_uuid, attacker);
         }
     }
 
     send_blink(tx, ty) {
-        // Send a message to the server to blink
         let outer = this;
         this.ws.send(JSON.stringify({
             'event': "blink",
@@ -163,12 +145,23 @@ class MutiPlayerSocket {
     }
 
     receive_blink(uuid, tx, ty) {
-        // Receive a message from the server to blink
         let player = this.get_player(uuid);
-
-        // if the player is not found, oversee it
         if (player) {
             player.blink(tx, ty);
         }
+    }
+
+    send_message(username, text) {
+        let outer =this;
+        this.ws.send(JSON.stringify({
+            'event': "message",
+            'uuid': outer.uuid,
+            'username': username,
+            'text': text,
+        }));
+    }
+
+    receive_message(uuid, username, text) {
+        this.playground.chat_field.add_message(username, text);
     }
 }

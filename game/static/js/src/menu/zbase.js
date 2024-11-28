@@ -16,9 +16,6 @@ class AcGameMenu {
             退出
         </div>
     </div>
-    <div class="footer">
-        <a href="https://beian.miit.gov.cn/" target="_blank">豫ICP备2023017825号</a>
-    </div>
 </div>
 `);
         this.$menu.hide();
@@ -36,15 +33,15 @@ class AcGameMenu {
 
     add_listening_events() {
         let outer = this;
-        this.$single_mode.click(function() {
+        this.$single_mode.click(function(){
             outer.hide();
             outer.root.playground.show("single mode");
         });
-        this.$multi_mode.click(function() {
+        this.$multi_mode.click(function(){
             outer.hide();
             outer.root.playground.show("multi mode");
         });
-        this.$settings.click(function() {
+        this.$settings.click(function(){
             outer.root.settings.logout_on_remote();
         });
     }
@@ -57,4 +54,3 @@ class AcGameMenu {
         this.$menu.hide();
     }
 }
-

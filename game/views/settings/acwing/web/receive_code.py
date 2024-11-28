@@ -9,17 +9,17 @@ from random import randint
 
 def receive_code(request):
     data = request.GET
-    code = data.get('code')  # 授权Code
-    state = data.get('state')  # 对暗号
-    if not cache.has_key(state):  # 如果没有这个state说明没有搞过这个state，不是这个服务器发起的暗号
-        return redirect("index")
+    code = data.get('code')
+    state = data.get('state')
 
-    cache.delete(state)  # 删除state
+    if not cache.has_key(state):
+        return redirect("index")
+    cache.delete(state)
 
     apply_access_token_url = "https://www.acwing.com/third_party/api/oauth2/access_token/"
     params = {
-        'appid': "5745",
-        'secret': "978b3b1f18284f26830c391de738eac8",
+        'appid': "165",
+        'secret': "2a79c385f35e4533ab803031fab68e3d",
         'code': code
     }
 
@@ -46,9 +46,9 @@ def receive_code(request):
         username += str(randint(0, 9))
 
     user = User.objects.create(username=username)
-    Player.objects.create(user=user, photo=photo, openid=openid)
+    player = Player.objects.create(user=user, photo=photo, openid=openid)
 
     login(request, user)
 
-    # 返回重定向的链接,这时候就体现了路由的时候name的重要性
     return redirect("index")
+

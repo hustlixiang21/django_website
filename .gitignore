@@ -2,3 +2,4 @@
 /.idea
 *.swq
 .vscode
+.db.sqlite3

@@ -17,19 +17,16 @@ class FireBall extends AcGameObject {
     }
 
     start() {
-
     }
 
     update() {
-        if (this.move_length < this.eps || this.x < 0 || this.x > this.playground.width || this.y < 0 || this.y > this.playground.height) {
+        if (this.move_length < this.eps) {
             this.destroy();
             return false;
         }
 
         this.update_move();
-        this.fireball_collision();
-        
-        // 判断放在自己的窗口里，敌人不进行判断
+
         if (this.player.character !== "enemy") {
             this.update_attack();
         }
@@ -54,39 +51,17 @@ class FireBall extends AcGameObject {
         }
     }
 
-    fireball_collision() {
-        // fireball collides with other fireballs, it will destroy both of them
-        for (let i = 0; i < AC_GAME_OBJECTS.length; i++)
-        {
-            let gameobject = AC_GAME_OBJECTS[i];
-            if (gameobject instanceof FireBall && this !== gameobject && this.is_collision(gameobject))
-            {
-                this.destroy();
-                gameobject.destroy();
-                for (let i = 0; i < 10 + Math.random() * 10; i ++ ) {
-                    let x = (this.x + gameobject.x) / 2, y = (this.y + gameobject.x) / 2;
-                    let radius = this.radius * Math.random() * 0.5;
-                    let angle = Math.PI * 2 * Math.random();
-                    let v_x = Math.cos(angle), v_y = Math.sin(angle);
-                    let color = this.color;
-                    let speed = this.speed * 10;
-                    let move_length = this.radius * Math.random() * 10;
-                    new Particle(this.playground, x, y, radius, v_x, v_y, color, speed, move_length);
-                }
-            }
-        }
-    }
-
     get_dist(x1, y1, x2, y2) {
         let dx = x1 - x2;
         let dy = y1 - y2;
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    is_collision(obj) {
-        let distance =  this.get_dist(this.x, this.y, obj.x, obj.y);
-        return distance < this.radius + obj.radius;
-
+    is_collision(player) {
+        let distance = this.get_dist(this.x, this.y, player.x, player.y);
+        if (distance < this.radius + player.radius)
+            return true;
+        return false;
     }
 
     attack(player) {

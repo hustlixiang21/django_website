@@ -6,7 +6,6 @@ from game.models.player.player import Player
 from random import randint
 
 
-
 def receive_code(request):
     data = request.GET
 
@@ -16,7 +15,7 @@ def receive_code(request):
             'errcode': data['errcode'],
             'errmsg': data['errmsg'],
         })
-    
+
     code = data.get('code')
     state = data.get('state')
 
@@ -24,13 +23,12 @@ def receive_code(request):
         return JsonResponse({
             'result': "state not exist"
         })
-    
     cache.delete(state)
 
     apply_access_token_url = "https://www.acwing.com/third_party/api/oauth2/access_token/"
     params = {
-        'appid': "5745",
-        'secret': "978b3b1f18284f26830c391de738eac8",
+        'appid': "165",
+        'secret': "2a79c385f35e4533ab803031fab68e3d",
         'code': code
     }
 
@@ -47,6 +45,7 @@ def receive_code(request):
             'username': player.user.username,
             'photo': player.photo,
         })
+
 
     get_userinfo_url = "https://www.acwing.com/third_party/api/meta/identity/getinfo/"
     params = {
@@ -68,4 +67,3 @@ def receive_code(request):
         'username': player.user.username,
         'photo': player.photo,
     })
-

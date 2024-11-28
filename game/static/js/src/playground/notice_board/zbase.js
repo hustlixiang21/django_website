@@ -8,7 +8,6 @@ class NoticeBoard extends AcGameObject {
     }
 
     start() {
-
     }
 
     write(text) {
